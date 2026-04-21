@@ -40,7 +40,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, push, onChildAdded, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
         
-        // आपका Firebase Config
         const firebaseConfig = {
             apiKey: "AIzaSyCml0iKyB9IP_8hlRICNL5oul_REv6JZOc",
             authDomain: "whatsappchattingapp-2031b.firebaseapp.com",
@@ -61,7 +60,6 @@
             window.location.href = 'index.html';
         }
         
-        // ऑनलाइन स्टेटस
         const userStatusRef = ref(db, 'users/' + userPhone);
         const connectedRef = ref(db, '.info/connected');
         
@@ -74,7 +72,6 @@
             }
         });
         
-        // ऑनलाइन काउंट
         const usersRef = ref(db, 'users');
         onValue(usersRef, (snapshot) => {
             let online = 0;
@@ -125,7 +122,6 @@
             }
         });
         
-        // 📷 फोटो अपलोड (Base64 - 10MB तक)
         document.getElementById('imageBtn').addEventListener('click', () => {
             document.getElementById('imageInput').click();
         });
@@ -135,52 +131,32 @@
             if(!file) return;
             
             if(!file.type.startsWith('image/')) {
-                alert("❌ कृपया सिर्फ इमेज फाइल चुनें (JPG, PNG, GIF)");
+                alert("❌ कृपया सिर्फ इमेज फाइल चुनें");
                 e.target.value = '';
                 return;
             }
             
-            // 10MB की limit
             if(file.size > 10 * 1024 * 1024) {
-                alert("❌ फोटो 10MB से छोटी होनी चाहिए! आपकी फोटो: " + (file.size / (1024 * 1024)).toFixed(2) + "MB");
+                alert("❌ फोटो 10MB से छोटी होनी चाहिए!");
                 e.target.value = '';
                 return;
             }
             
-            // लोडिंग दिखाएं
             const loadingDiv = document.createElement('div');
             loadingDiv.className = 'message message-sent';
-            loadingDiv.innerHTML = `
-                <div class="message-sender">${userName}</div>
-                <div class="message-text">
-                    ⏳ फोटो अपलोड हो रही है... (${(file.size / (1024 * 1024)).toFixed(2)}MB)
-                    <span class="loading-spinner"></span>
-                </div>
-            `;
+            loadingDiv.innerHTML = `<div class="message-sender">${userName}</div><div class="message-text">⏳ फोटो अपलोड हो रही है... (${(file.size / (1024 * 1024)).toFixed(2)}MB)</div>`;
             document.getElementById('messagesArea').appendChild(loadingDiv);
-            loadingDiv.scrollIntoView({ behavior: 'smooth' });
             
-            // फाइल को Base64 में बदलें
             const reader = new FileReader();
-            
             reader.onload = function(event) {
                 const base64Image = event.target.result;
                 loadingDiv.remove();
                 sendMessage('', true, base64Image);
-                
-                // छोटी सूचना
-                const toast = document.createElement('div');
-                toast.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#25d366;color:black;padding:8px 16px;border-radius:20px;font-size:12px;z-index:1000;animation:fadeOut 2s forwards;';
-                toast.innerHTML = '✅ फोटो भेज दी गई!';
-                document.body.appendChild(toast);
-                setTimeout(() => toast.remove(), 2000);
             };
-            
             reader.onerror = function() {
                 loadingDiv.remove();
-                alert("❌ फोटो पढ़ने में त्रुटि! कृपया दूसरी फोटो चुनें।");
+                alert("❌ फोटो पढ़ने में त्रुटि!");
             };
-            
             reader.readAsDataURL(file);
             e.target.value = '';
         });
@@ -205,9 +181,7 @@
             emojis.forEach(emoji => {
                 const btn = document.createElement('button');
                 btn.textContent = emoji;
-                btn.style.cssText = 'font-size:26px;border:none;background:transparent;cursor:pointer;padding:6px;border-radius:8px;transition:all 0.2s;';
-                btn.onmouseenter = () => btn.style.background = '#075e54';
-                btn.onmouseleave = () => btn.style.background = 'transparent';
+                btn.style.cssText = 'font-size:26px;border:none;background:transparent;cursor:pointer;padding:6px;border-radius:8px;';
                 btn.onclick = () => {
                     document.getElementById('messageInput').value += emoji;
                     document.getElementById('messageInput').focus();
@@ -219,19 +193,9 @@
             
             document.body.appendChild(picker);
             emojiPickerOpen = true;
-            
-            setTimeout(() => {
-                document.addEventListener('click', function closePicker(e) {
-                    if(!picker.contains(e.target) && e.target !== document.getElementById('emojiBtn')) {
-                        picker.remove();
-                        emojiPickerOpen = false;
-                        document.removeEventListener('click', closePicker);
-                    }
-                });
-            }, 10);
         });
         
-        // मैसेज दिखाना (Base64 इमेज के साथ)
+        // मैसेज दिखाना - फिक्स्ड वर्जन
         onChildAdded(messagesRef, (data) => {
             const msg = data.val();
             const messagesDiv = document.getElementById('messagesArea');
@@ -245,12 +209,20 @@
             const time = new Date(msg.timestamp).toLocaleTimeString('hi-IN', {hour:'2-digit', minute:'2-digit'});
             
             if(msg.type === 'image') {
-                const imageSrc = msg.imageBase64;
-                msgDiv.innerHTML = `
-                    <div class="message-sender">${escapeHtml(msg.sender)}</div>
-                    <img src="${imageSrc}" class="message-image" onclick="window.open(this.src)" alt="फोटो" loading="lazy">
-                    <div class="message-time">${time}</div>
-                `;
+                let imageSrc = msg.imageBase64;
+                if(imageSrc && imageSrc.startsWith('data:image')) {
+                    msgDiv.innerHTML = `
+                        <div class="message-sender">${escapeHtml(msg.sender)}</div>
+                        <img src="${imageSrc}" class="message-image" style="max-width:200px;max-height:200px;border-radius:12px;cursor:pointer;margin-top:5px;" onclick="window.open(this.src)">
+                        <div class="message-time">${time}</div>
+                    `;
+                } else {
+                    msgDiv.innerHTML = `
+                        <div class="message-sender">${escapeHtml(msg.sender)}</div>
+                        <div class="message-text">❌ फोटो लोड नहीं हुई</div>
+                        <div class="message-time">${time}</div>
+                    `;
+                }
             } else {
                 msgDiv.innerHTML = `
                     <div class="message-sender">${escapeHtml(msg.sender)}</div>
@@ -269,45 +241,11 @@
             return div.innerHTML;
         }
         
-        // लॉगआउट
         document.getElementById('logoutBtn').addEventListener('click', async () => {
             await update(userStatusRef, { online: false });
             localStorage.clear();
             window.location.href = 'index.html';
         });
-        
-        // CSS animation के लिए style जोड़ें
-        const style = document.createElement('style');
-        style.textContent = `
-            .loading-spinner {
-                display: inline-block;
-                width: 14px;
-                height: 14px;
-                border: 2px solid #fff;
-                border-radius: 50%;
-                border-top-color: transparent;
-                animation: spin 0.6s linear infinite;
-                margin-left: 8px;
-                vertical-align: middle;
-            }
-            @keyframes spin {
-                to { transform: rotate(360deg); }
-            }
-            @keyframes fadeOut {
-                0% { opacity: 1; }
-                70% { opacity: 1; }
-                100% { opacity: 0; visibility: hidden; }
-            }
-            .message-image {
-                max-width: 200px;
-                max-height: 200px;
-                border-radius: 12px;
-                margin-top: 5px;
-                cursor: pointer;
-                object-fit: cover;
-            }
-        `;
-        document.head.appendChild(style);
     </script>
 </body>
 </html>
