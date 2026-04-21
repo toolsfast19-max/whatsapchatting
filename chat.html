@@ -23,14 +23,14 @@
         <div class="messages-area" id="messagesArea">
             <div class="welcome-msg">
                 👋 वेलकम! यहाँ अपने दोस्तों से बात करें<br>
-                📷 फोटो भेज सकते हैं | 😊 इमोजी भी है
+                📷 फोटो भेज सकते हैं (10MB तक) | 😊 इमोजी भी है
             </div>
         </div>
         
         <div class="input-area">
             <button id="emojiBtn" class="emoji-btn" title="इमोजी">😊</button>
             <input type="text" id="messageInput" placeholder="टाइप करें..." autocomplete="off">
-            <button id="imageBtn" class="image-btn" title="फोटो भेजें">📷</button>
+            <button id="imageBtn" class="image-btn" title="फोटो भेजें (10MB तक)">📷</button>
             <button id="sendBtn" class="send-btn" title="भेजें">➤</button>
         </div>
         <input type="file" id="imageInput" accept="image/*" style="display: none;">
@@ -38,10 +38,9 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, push, onChildAdded, set, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
-        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+        import { getDatabase, ref, push, onChildAdded, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
         
-        // आपका Firebase Config (आपने दिया हुआ)
+        // आपका Firebase Config
         const firebaseConfig = {
             apiKey: "AIzaSyCml0iKyB9IP_8hlRICNL5oul_REv6JZOc",
             authDomain: "whatsappchattingapp-2031b.firebaseapp.com",
@@ -52,10 +51,8 @@
             appId: "1:588426238074:web:9d20c5e269ec9cef7ec3c3"
         };
         
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        const storage = getStorage(app);
         
         const userName = localStorage.getItem('userName');
         const userPhone = localStorage.getItem('userPhone');
@@ -64,25 +61,20 @@
             window.location.href = 'index.html';
         }
         
-        // ऑनलाइन स्टेटस सेट करें
+        // ऑनलाइन स्टेटस
         const userStatusRef = ref(db, 'users/' + userPhone);
         const connectedRef = ref(db, '.info/connected');
         
         onValue(connectedRef, (snap) => {
             if(snap.val() === true) {
-                update(userStatusRef, { 
-                    online: true, 
-                    lastSeen: new Date().toISOString() 
-                });
-                
-                // जब ऐप बंद हो तो ऑफलाइन करें
+                update(userStatusRef, { online: true, lastSeen: new Date().toISOString() });
                 window.addEventListener('beforeunload', () => {
                     update(userStatusRef, { online: false });
                 });
             }
         });
         
-        // ऑनलाइन यूजर्स की संख्या दिखाएं
+        // ऑनलाइन काउंट
         const usersRef = ref(db, 'users');
         onValue(usersRef, (snapshot) => {
             let online = 0;
@@ -95,16 +87,15 @@
             });
             document.getElementById('onlineCount').innerHTML = online;
             if(onlineNames.length > 0) {
-                document.querySelector('.online-users span').innerHTML = `🟢 ऑनलाइन: ${online} लोग (${onlineNames.join(', ')})`;
+                document.querySelector('.online-users span').innerHTML = `🟢 ऑनलाइन: ${online} लोग (${onlineNames.slice(0,5).join(', ')}${onlineNames.length > 5 ? '...' : ''})`;
             } else {
                 document.querySelector('.online-users span').innerHTML = `🟢 ऑनलाइन: 0 लोग`;
             }
         });
         
-        // मैसेज भेजने का फंक्शन
         const messagesRef = ref(db, 'messages');
         
-        function sendMessage(text, isImage = false, imageUrl = '') {
+        function sendMessage(text, isImage = false, imageBase64 = '') {
             if(!text && !isImage) return;
             
             const message = {
@@ -114,19 +105,10 @@
                 timestamp: new Date().toISOString(),
                 type: isImage ? 'image' : 'text'
             };
-            
-            if(isImage) message.imageUrl = imageUrl;
-            
-            push(messagesRef, message).then(() => {
-                // स्क्रॉल करें
-                setTimeout(() => {
-                    const msgs = document.getElementById('messagesArea');
-                    msgs.scrollTop = msgs.scrollHeight;
-                }, 100);
-            });
+            if(isImage) message.imageBase64 = imageBase64;
+            push(messagesRef, message);
         }
         
-        // सेंड बटन
         document.getElementById('sendBtn').addEventListener('click', () => {
             const input = document.getElementById('messageInput');
             if(input.value.trim()) {
@@ -136,7 +118,6 @@
             }
         });
         
-        // एंटर की
         document.getElementById('messageInput').addEventListener('keypress', (e) => {
             if(e.key === 'Enter') {
                 e.preventDefault();
@@ -144,38 +125,78 @@
             }
         });
         
-        // इमेज भेजना
+        // 📷 फोटो अपलोड (Base64 - 10MB तक)
         document.getElementById('imageBtn').addEventListener('click', () => {
             document.getElementById('imageInput').click();
         });
         
-        document.getElementById('imageInput').addEventListener('change', async (e) => {
+        document.getElementById('imageInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
-            if(file && file.type.startsWith('image/')) {
-                if(file.size > 5 * 1024 * 1024) {
-                    alert("❌ फोटो 5MB से छोटी होनी चाहिए!");
-                    return;
+            if(!file) return;
+            
+            if(!file.type.startsWith('image/')) {
+                alert("❌ कृपया सिर्फ इमेज फाइल चुनें (JPG, PNG, GIF)");
+                e.target.value = '';
+                return;
+            }
+            
+            // 10MB की limit
+            if(file.size > 10 * 1024 * 1024) {
+                alert("❌ फोटो 10MB से छोटी होनी चाहिए! आपकी फोटो: " + (file.size / (1024 * 1024)).toFixed(2) + "MB");
+                e.target.value = '';
+                return;
+            }
+            
+            // लोडिंग दिखाएं
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message message-sent';
+            loadingDiv.innerHTML = `
+                <div class="message-sender">${userName}</div>
+                <div class="message-text">
+                    ⏳ फोटो अपलोड हो रही है... (${(file.size / (1024 * 1024)).toFixed(2)}MB)
+                    <span class="loading-spinner"></span>
+                </div>
+            `;
+            document.getElementById('messagesArea').appendChild(loadingDiv);
+            loadingDiv.scrollIntoView({ behavior: 'smooth' });
+            
+            // फाइल को Base64 में बदलें
+            const reader = new FileReader();
+            
+            reader.onload = function(event) {
+                const base64Image = event.target.result;
+                
+                // लोडिंग हटाएं
+                loadingDiv.remove();
+                
+                // Base64 साइज चेक करें (वार्निंग के लिए)
+                const base64Size = (base64Image.length * 0.75) / (1024 * 1024);
+                if(base64Size > 12) {
+                    console.warn("Base64 साइज बड़ा है: " + base64Size.toFixed(2) + "MB");
                 }
                 
-                const loadingMsg = document.createElement('div');
-                loadingMsg.className = 'message message-sent';
-                loadingMsg.innerHTML = '<div class="message-sender">' + userName + '</div><div class="message-text">⏳ फोटो अपलोड हो रही है...</div>';
-                document.getElementById('messagesArea').appendChild(loadingMsg);
+                // मैसेज भेजें
+                sendMessage('', true, base64Image);
                 
-                const imageRef = storageRef(storage, 'images/' + Date.now() + '_' + file.name);
-                await uploadBytes(imageRef, file);
-                const url = await getDownloadURL(imageRef);
-                
-                loadingMsg.remove();
-                sendMessage('', true, url);
-            } else {
-                alert("❌ कृपया एक इमेज फाइल चुनें!");
-            }
+                // छोटी सूचना
+                const toast = document.createElement('div');
+                toast.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#25d366;color:black;padding:8px 16px;border-radius:20px;font-size:12px;z-index:1000;animation:fadeOut 2s forwards;';
+                toast.innerHTML = '✅ फोटो भेज दी गई!';
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 2000);
+            };
+            
+            reader.onerror = function() {
+                loadingDiv.remove();
+                alert("❌ फोटो पढ़ने में त्रुटि! कृपया दूसरी फोटो चुनें।");
+            };
+            
+            reader.readAsDataURL(file);
             e.target.value = '';
         });
         
         // इमोजी पिकर
-        const emojis = ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕','🤑','🤠','😈','👿','👹','👺','🤡','💩','👻','💀','👽','🤖','🎃','😺','😸','😹','😻','😼','😽','🙀','😿','😾','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','🎉','✨','⭐','🌟','💥','🔥','💯'];
+        const emojis = ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕','🤑','🤠','😈','👿','👹','👺','🤡','💩','👻','💀','👽','🤖','🎃','❤️','💕','💞','💓','💗','💖','💘','💝','🎉','✨','⭐','🌟','💥','🔥','💯'];
         
         let emojiPickerOpen = false;
         
@@ -198,9 +219,8 @@
                 btn.onmouseenter = () => btn.style.background = '#075e54';
                 btn.onmouseleave = () => btn.style.background = 'transparent';
                 btn.onclick = () => {
-                    const input = document.getElementById('messageInput');
-                    input.value += emoji;
-                    input.focus();
+                    document.getElementById('messageInput').value += emoji;
+                    document.getElementById('messageInput').focus();
                     picker.remove();
                     emojiPickerOpen = false;
                 };
@@ -210,7 +230,6 @@
             document.body.appendChild(picker);
             emojiPickerOpen = true;
             
-            // बाहर क्लिक करने पर बंद
             setTimeout(() => {
                 document.addEventListener('click', function closePicker(e) {
                     if(!picker.contains(e.target) && e.target !== document.getElementById('emojiBtn')) {
@@ -222,27 +241,25 @@
             }, 10);
         });
         
-        // मैसेज रिसीव करना और दिखाना
+        // मैसेज दिखाना (Base64 इमेज के साथ)
         onChildAdded(messagesRef, (data) => {
             const msg = data.val();
             const messagesDiv = document.getElementById('messagesArea');
             const isMe = msg.senderPhone === userPhone;
             
-            // वेलकम मैसेज हटाएं अगर पहला मैसेज आया
             const welcome = messagesDiv.querySelector('.welcome-msg');
-            if(welcome && messagesDiv.children.length > 1) {
-                welcome.remove();
-            }
+            if(welcome && messagesDiv.children.length > 1) welcome.remove();
             
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${isMe ? 'message-sent' : 'message-received'}`;
-            
             const time = new Date(msg.timestamp).toLocaleTimeString('hi-IN', {hour:'2-digit', minute:'2-digit'});
             
             if(msg.type === 'image') {
+                // Base64 इमेज दिखाएं
+                const imageSrc = msg.imageBase64 || msg.imageUrl;
                 msgDiv.innerHTML = `
                     <div class="message-sender">${escapeHtml(msg.sender)}</div>
-                    <img src="${msg.imageUrl}" class="message-image" onclick="window.open(this.src)" alt="फोटो" style="max-width:200px;max-height:200px;border-radius:12px;cursor:pointer;margin-top:5px;">
+                    <img src="${imageSrc}" class="message-image" onclick="window.open(this.src)" alt="फोटो" loading="lazy">
                     <div class="message-time">${time}</div>
                 `;
             } else {
@@ -269,6 +286,39 @@
             localStorage.clear();
             window.location.href = 'index.html';
         });
+        
+        // CSS animation के लिए style जोड़ें
+        const style = document.createElement('style');
+        style.textContent = `
+            .loading-spinner {
+                display: inline-block;
+                width: 14px;
+                height: 14px;
+                border: 2px solid #fff;
+                border-radius: 50%;
+                border-top-color: transparent;
+                animation: spin 0.6s linear infinite;
+                margin-left: 8px;
+                vertical-align: middle;
+            }
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+            @keyframes fadeOut {
+                0% { opacity: 1; }
+                70% { opacity: 1; }
+                100% { opacity: 0; visibility: hidden; }
+            }
+            .message-image {
+                max-width: 200px;
+                max-height: 200px;
+                border-radius: 12px;
+                margin-top: 5px;
+                cursor: pointer;
+                object-fit: cover;
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html>
