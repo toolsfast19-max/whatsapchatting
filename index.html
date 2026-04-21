@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>लॉगिन - मेरी चैट</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="logo">
+                <span>💬</span>
+                <h2>मेरी चैट</h2>
+            </div>
+            <form id="loginForm">
+                <input type="text" id="name" placeholder="आपका नाम" required autocomplete="off">
+                <input type="tel" id="phone" placeholder="मोबाइल नंबर (10 अंक)" pattern="[0-9]{10}" required>
+                <button type="submit" id="loginBtn">लॉगिन करें</button>
+            </form>
+            <p class="note">🔒 सिर्फ 10-15 दोस्तों के लिए प्राइवेट ग्रुप</p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        
+        // आपका Firebase Config (आपने दिया हुआ)
+        const firebaseConfig = {
+            apiKey: "AIzaSyCml0iKyB9IP_8hlRICNL5oul_REv6JZOc",
+            authDomain: "whatsappchattingapp-2031b.firebaseapp.com",
+            databaseURL: "https://whatsappchattingapp-2031b-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "whatsappchattingapp-2031b",
+            storageBucket: "whatsappchattingapp-2031b.firebasestorage.app",
+            messagingSenderId: "588426238074",
+            appId: "1:588426238074:web:9d20c5e269ec9cef7ec3c3"
+        };
+        
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
+            
+            // 🔴 जरूर: अपने 15 लोगों के फोन नंबर यहाँ डालें
+            // उदाहरण: "9876543210", "9876543211", "9876543212"
+            const allowedUsers = ["7905950367", "9356061507", "8308279721"];
+            
+            if(!allowedUsers.includes(phone)) {
+                alert("❌ आप इस ग्रुप के मेंबर नहीं हैं! सिर्फ 15 लोगों के लिए प्राइवेट ग्रुप है।");
+                return;
+            }
+            
+            // चेक करें कि यूजर पहले से मौजूद तो नहीं
+            const userRef = ref(db, 'users/' + phone);
+            const snapshot = await get(userRef);
+            
+            if(!snapshot.exists()) {
+                // नया यूजर सेव करें
+                await set(ref(db, 'users/' + phone), {
+                    name: name,
+                    phone: phone,
+                    lastSeen: new Date().toISOString(),
+                    online: true,
+                    joinedAt: new Date().toISOString()
+                });
+            } else {
+                // पुराना यूजर अपडेट करें
+                await set(ref(db, 'users/' + phone), {
+                    ...snapshot.val(),
+                    name: name,
+                    online: true,
+                    lastSeen: new Date().toISOString()
+                });
+            }
+            
+            localStorage.setItem('userName', name);
+            localStorage.setItem('userPhone', phone);
+            window.location.href = 'chat.html';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>चैट - मेरी चैट</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <div class="header-info">
+                <span>👥</span>
+                <h3>ग्रुप चैट</h3>
+            </div>
+            <button id="logoutBtn" class="logout-btn">🚪 बाहर निकलें</button>
+        </div>
+        
+        <div class="online-users">
+            <span>🟢 ऑनलाइन: <span id="onlineCount">0</span> लोग</span>
+        </div>
+        
+        <div class="messages-area" id="messagesArea">
+            <div class="welcome-msg">
+                👋 वेलकम! यहाँ अपने दोस्तों से बात करें<br>
+                📷 फोटो भेज सकते हैं | 😊 इमोजी भी है
+            </div>
+        </div>
+        
+        <div class="input-area">
+            <button id="emojiBtn" class="emoji-btn" title="इमोजी">😊</button>
+            <input type="text" id="messageInput" placeholder="टाइप करें..." autocomplete="off">
+            <button id="imageBtn" class="image-btn" title="फोटो भेजें">📷</button>
+            <button id="sendBtn" class="send-btn" title="भेजें">➤</button>
+        </div>
+        <input type="file" id="imageInput" accept="image/*" style="display: none;">
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, push, onChildAdded, set, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+        
+        // आपका Firebase Config (आपने दिया हुआ)
+        const firebaseConfig = {
+            apiKey: "AIzaSyCml0iKyB9IP_8hlRICNL5oul_REv6JZOc",
+            authDomain: "whatsappchattingapp-2031b.firebaseapp.com",
+            databaseURL: "https://whatsappchattingapp-2031b-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "whatsappchattingapp-2031b",
+            storageBucket: "whatsappchattingapp-2031b.firebasestorage.app",
+            messagingSenderId: "588426238074",
+            appId: "1:588426238074:web:9d20c5e269ec9cef7ec3c3"
+        };
+        
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const storage = getStorage(app);
+        
+        const userName = localStorage.getItem('userName');
+        const userPhone = localStorage.getItem('userPhone');
+        
+        if(!userName || !userPhone) {
+            window.location.href = 'index.html';
+        }
+        
+        // ऑनलाइन स्टेटस सेट करें
+        const userStatusRef = ref(db, 'users/' + userPhone);
+        const connectedRef = ref(db, '.info/connected');
+        
+        onValue(connectedRef, (snap) => {
+            if(snap.val() === true) {
+                update(userStatusRef, { 
+                    online: true, 
+                    lastSeen: new Date().toISOString() 
+                });
+                
+                // जब ऐप बंद हो तो ऑफलाइन करें
+                window.addEventListener('beforeunload', () => {
+                    update(userStatusRef, { online: false });
+                });
+            }
+        });
+        
+        // ऑनलाइन यूजर्स की संख्या दिखाएं
+        const usersRef = ref(db, 'users');
+        onValue(usersRef, (snapshot) => {
+            let online = 0;
+            let onlineNames = [];
+            snapshot.forEach((child) => {
+                if(child.val().online === true) {
+                    online++;
+                    onlineNames.push(child.val().name);
+                }
+            });
+            document.getElementById('onlineCount').innerHTML = online;
+            if(onlineNames.length > 0) {
+                document.querySelector('.online-users span').innerHTML = `🟢 ऑनलाइन: ${online} लोग (${onlineNames.join(', ')})`;
+            } else {
+                document.querySelector('.online-users span').innerHTML = `🟢 ऑनलाइन: 0 लोग`;
+            }
+        });
+        
+        // मैसेज भेजने का फंक्शन
+        const messagesRef = ref(db, 'messages');
+        
+        function sendMessage(text, isImage = false, imageUrl = '') {
+            if(!text && !isImage) return;
+            
+            const message = {
+                text: text || (isImage ? '📷 फोटो' : ''),
+                sender: userName,
+                senderPhone: userPhone,
+                timestamp: new Date().toISOString(),
+                type: isImage ? 'image' : 'text'
+            };
+            
+            if(isImage) message.imageUrl = imageUrl;
+            
+            push(messagesRef, message).then(() => {
+                // स्क्रॉल करें
+                setTimeout(() => {
+                    const msgs = document.getElementById('messagesArea');
+                    msgs.scrollTop = msgs.scrollHeight;
+                }, 100);
+            });
+        }
+        
+        // सेंड बटन
+        document.getElementById('sendBtn').addEventListener('click', () => {
+            const input = document.getElementById('messageInput');
+            if(input.value.trim()) {
+                sendMessage(input.value.trim());
+                input.value = '';
+                input.focus();
+            }
+        });
+        
+        // एंटर की
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if(e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('sendBtn').click();
+            }
+        });
+        
+        // इमेज भेजना
+        document.getElementById('imageBtn').addEventListener('click', () => {
+            document.getElementById('imageInput').click();
+        });
+        
+        document.getElementById('imageInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if(file && file.type.startsWith('image/')) {
+                if(file.size > 5 * 1024 * 1024) {
+                    alert("❌ फोटो 5MB से छोटी होनी चाहिए!");
+                    return;
+                }
+                
+                const loadingMsg = document.createElement('div');
+                loadingMsg.className = 'message message-sent';
+                loadingMsg.innerHTML = '<div class="message-sender">' + userName + '</div><div class="message-text">⏳ फोटो अपलोड हो रही है...</div>';
+                document.getElementById('messagesArea').appendChild(loadingMsg);
+                
+                const imageRef = storageRef(storage, 'images/' + Date.now() + '_' + file.name);
+                await uploadBytes(imageRef, file);
+                const url = await getDownloadURL(imageRef);
+                
+                loadingMsg.remove();
+                sendMessage('', true, url);
+            } else {
+                alert("❌ कृपया एक इमेज फाइल चुनें!");
+            }
+            e.target.value = '';
+        });
+        
+        // इमोजी पिकर
+        const emojis = ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕','🤑','🤠','😈','👿','👹','👺','🤡','💩','👻','💀','👽','🤖','🎃','😺','😸','😹','😻','😼','😽','🙀','😿','😾','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','🎉','✨','⭐','🌟','💥','🔥','💯'];
+        
+        let emojiPickerOpen = false;
+        
+        document.getElementById('emojiBtn').addEventListener('click', () => {
+            if(emojiPickerOpen) {
+                const picker = document.getElementById('emojiPicker');
+                if(picker) picker.remove();
+                emojiPickerOpen = false;
+                return;
+            }
+            
+            const picker = document.createElement('div');
+            picker.id = 'emojiPicker';
+            picker.style.cssText = 'position:fixed;bottom:80px;left:10px;background:#2d2d2d;border:1px solid #075e54;border-radius:15px;padding:12px;width:280px;max-height:250px;overflow-y:auto;display:grid;grid-template-columns:repeat(8,1fr);gap:6px;z-index:1000;box-shadow:0 4px 15px rgba(0,0,0,0.3);';
+            
+            emojis.forEach(emoji => {
+                const btn = document.createElement('button');
+                btn.textContent = emoji;
+                btn.style.cssText = 'font-size:26px;border:none;background:transparent;cursor:pointer;padding:6px;border-radius:8px;transition:all 0.2s;';
+                btn.onmouseenter = () => btn.style.background = '#075e54';
+                btn.onmouseleave = () => btn.style.background = 'transparent';
+                btn.onclick = () => {
+                    const input = document.getElementById('messageInput');
+                    input.value += emoji;
+                    input.focus();
+                    picker.remove();
+                    emojiPickerOpen = false;
+                };
+                picker.appendChild(btn);
+            });
+            
+            document.body.appendChild(picker);
+            emojiPickerOpen = true;
+            
+            // बाहर क्लिक करने पर बंद
+            setTimeout(() => {
+                document.addEventListener('click', function closePicker(e) {
+                    if(!picker.contains(e.target) && e.target !== document.getElementById('emojiBtn')) {
+                        picker.remove();
+                        emojiPickerOpen = false;
+                        document.removeEventListener('click', closePicker);
+                    }
+                });
+            }, 10);
+        });
+        
+        // मैसेज रिसीव करना और दिखाना
+        onChildAdded(messagesRef, (data) => {
+            const msg = data.val();
+            const messagesDiv = document.getElementById('messagesArea');
+            const isMe = msg.senderPhone === userPhone;
+            
+            // वेलकम मैसेज हटाएं अगर पहला मैसेज आया
+            const welcome = messagesDiv.querySelector('.welcome-msg');
+            if(welcome && messagesDiv.children.length > 1) {
+                welcome.remove();
+            }
+            
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${isMe ? 'message-sent' : 'message-received'}`;
+            
+            const time = new Date(msg.timestamp).toLocaleTimeString('hi-IN', {hour:'2-digit', minute:'2-digit'});
+            
+            if(msg.type === 'image') {
+                msgDiv.innerHTML = `
+                    <div class="message-sender">${escapeHtml(msg.sender)}</div>
+                    <img src="${msg.imageUrl}" class="message-image" onclick="window.open(this.src)" alt="फोटो" style="max-width:200px;max-height:200px;border-radius:12px;cursor:pointer;margin-top:5px;">
+                    <div class="message-time">${time}</div>
+                `;
+            } else {
+                msgDiv.innerHTML = `
+                    <div class="message-sender">${escapeHtml(msg.sender)}</div>
+                    <div class="message-text">${escapeHtml(msg.text)}</div>
+                    <div class="message-time">${time}</div>
+                `;
+            }
+            
+            messagesDiv.appendChild(msgDiv);
+            msgDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        });
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // लॉगआउट
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            await update(userStatusRef, { online: false });
+            localStorage.clear();
+            window.location.href = 'index.html';
+        });
+    </script>
+</body>
+</html>
