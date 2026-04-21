@@ -165,17 +165,7 @@
             
             reader.onload = function(event) {
                 const base64Image = event.target.result;
-                
-                // लोडिंग हटाएं
                 loadingDiv.remove();
-                
-                // Base64 साइज चेक करें (वार्निंग के लिए)
-                const base64Size = (base64Image.length * 0.75) / (1024 * 1024);
-                if(base64Size > 12) {
-                    console.warn("Base64 साइज बड़ा है: " + base64Size.toFixed(2) + "MB");
-                }
-                
-                // मैसेज भेजें
                 sendMessage('', true, base64Image);
                 
                 // छोटी सूचना
@@ -255,8 +245,7 @@
             const time = new Date(msg.timestamp).toLocaleTimeString('hi-IN', {hour:'2-digit', minute:'2-digit'});
             
             if(msg.type === 'image') {
-                // Base64 इमेज दिखाएं
-                const imageSrc = msg.imageBase64 || msg.imageUrl;
+                const imageSrc = msg.imageBase64;
                 msgDiv.innerHTML = `
                     <div class="message-sender">${escapeHtml(msg.sender)}</div>
                     <img src="${imageSrc}" class="message-image" onclick="window.open(this.src)" alt="फोटो" loading="lazy">
